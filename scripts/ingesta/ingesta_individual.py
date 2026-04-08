@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import os
+from pathlib import Path
 
 def obtener_datos_accion(symbol):
     #URL de la api de Yahoo Finance para obtener los datos históricos de la acción seleccionada
@@ -40,9 +41,10 @@ def limpieza_minima(df):
 
 
 def df_to_parquet(df, symbol):
-    os.makedirs("data/bronze", exist_ok=True)
+    bronze_dir = Path(__file__).resolve().parents[2] / "data" / "bronze"
+    bronze_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = f"data/bronze/{symbol}_1d.parquet"
+    output_path = bronze_dir / f"{symbol}_1d.parquet"
     df.to_parquet(output_path, index=False)
 
     print(f"Datos de {symbol} guardados en formato Parquet.")
@@ -51,13 +53,15 @@ def df_to_parquet(df, symbol):
 
 
 
-def main():
-    symbol = "AAPL" # Cambiar por el símbolo de la acción deseada
+def guardar_datos_accion(symbol):
     df = obtener_datos_accion(symbol)
     if df is not None:
         df = limpieza_minima(df)
         df_to_parquet(df, symbol)
 
+
+def main():
+    guardar_datos_accion("AAPL")
 
 if __name__ == "__main__":
     main()
