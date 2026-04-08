@@ -86,9 +86,7 @@ Estrategia de decisión local vs distribuido:
 
 ## Documentos de trabajo actuales
 
-- `docs/ingesta-masiva-fuentes.md`: definicion de la ingesta Yahoo en esta fase.
-- `docs/arquitectura-ingesta-datalake.md`: arquitectura y tecnologia del Data Lake para escalar.
-- `docs/progreso-ingesta-yahoo.md`: resumen corto del estado actual.
+- `docs/Ingesta_Individual.md`: resumen simple del estado actual de ingesta.
 
 ## Roadmap por fases
 
@@ -107,7 +105,7 @@ Estrategia de decisión local vs distribuido:
 
 ## Siguientes pasos inmediatos
 
-- Implementar piloto con 1 simbolo (AAPL) usando Yahoo Finance.
-- Guardar Bronze en Parquet con particionado por simbolo/anio/mes.
-- Validar calidad minima (orden temporal, duplicados y reglas OHLCV).
-- Escalar a lote pequeno (10-20 simbolos) antes de pasar a ingesta masiva.
+- Ingesta individual y masiva ya implementadas con Yahoo Finance.
+- Datos guardados en `data/bronze` en formato Parquet.
+- Siguiente fase: procesamiento Silver (unificacion logica, limpieza y features).
+- Preparar dataset para analisis y modelo de regresion (precio o subida/bajada).
