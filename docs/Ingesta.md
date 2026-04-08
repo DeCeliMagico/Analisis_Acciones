@@ -7,6 +7,7 @@ La fase de ingesta esta completada para esta etapa inicial:
 1. Ingesta individual funcionando.
 2. Ingesta masiva funcionando con lista grande de simbolos.
 3. Guardado en Parquet dentro del Data Lake local.
+4. Granularidad diaria verificada y estable.
 
 ## Scripts implementados
 
@@ -18,11 +19,11 @@ La fase de ingesta esta completada para esta etapa inicial:
 Endpoint base usado:
 
 ```text
-https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}?interval=1d&range=max
+https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}?interval=1d&period1={period1}&period2={period2}
 ```
 
 - `interval=1d`: velas diarias.
-- `range=max`: historico maximo disponible.
+- `period1/period2`: rango explicito para evitar downsampling (3mo).
 
 ## Datos guardados
 
@@ -40,6 +41,12 @@ Ruta de salida:
 
 - `data/bronze/{symbol}_1d.parquet`
 
+Volumen actual observado:
+
+- 139 simbolos
+- ~1.32M filas totales en Bronze
+- ~9.5k filas medias por simbolo
+
 ## Como ejecutar
 
 ```powershell
@@ -52,5 +59,5 @@ python scripts/ingesta/ingesta_masiva.py
 Pasar a Silver:
 
 1. Unificar lectura de todos los parquet de Bronze.
-2. Limpieza de calidad.
-3. Crear features para analisis y modelo.
+2. Calcular features de retorno, tendencia, volatilidad y volumen.
+3. Crear targets para clasificacion y regresion de retorno t+1.

@@ -86,7 +86,9 @@ Estrategia de decisión local vs distribuido:
 
 ## Documentos de trabajo actuales
 
-- `docs/Ingesta_Individual.md`: resumen simple del estado actual de ingesta.
+- `docs/Ingesta.md`: resumen simple de la ingesta y estado actual.
+- `docs/Procesamiento.md`: plan de features y procesamiento Silver.
+- `docs/Objetivos.md`: objetivos de modelado (clasificacion y regresion).
 
 ## Roadmap por fases
 
@@ -107,5 +109,6 @@ Estrategia de decisión local vs distribuido:
 
 - Ingesta individual y masiva ya implementadas con Yahoo Finance.
 - Datos guardados en `data/bronze` en formato Parquet.
-- Siguiente fase: procesamiento Silver (unificacion logica, limpieza y features).
-- Preparar dataset para analisis y modelo de regresion (precio o subida/bajada).
+- Ingesta diaria corregida con `period1/period2` (evitando downsampling de Yahoo).
+- Siguiente fase: procesamiento Silver (features + targets de retorno t+1).
+- Preparar dataset para clasificacion binaria y regresion de retorno.

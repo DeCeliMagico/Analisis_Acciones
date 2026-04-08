@@ -1,11 +1,17 @@
 import requests
 import pandas as pd
-import os
 from pathlib import Path
+import time
+from datetime import datetime, timezone
 
 def obtener_datos_accion(symbol):
-    #URL de la api de Yahoo Finance para obtener los datos históricos de la acción seleccionada
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=max"
+    # URL de Yahoo con rango explicito en epoch para evitar downsampling (3mo)
+    period1 = int(datetime(1980, 1, 1, tzinfo=timezone.utc).timestamp())
+    period2 = int(time.time())
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        f"?interval=1d&period1={period1}&period2={period2}"
+    )
 
     #Llamada a la API
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
