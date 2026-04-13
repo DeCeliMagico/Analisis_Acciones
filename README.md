@@ -110,5 +110,6 @@ Estrategia de decisión local vs distribuido:
 - Ingesta individual y masiva ya implementadas con Yahoo Finance.
 - Datos guardados en `data/bronze` en formato Parquet.
 - Ingesta diaria corregida con `period1/period2` (evitando downsampling de Yahoo).
-- Siguiente fase: procesamiento Silver (features + targets de retorno t+1).
-- Preparar dataset para clasificacion binaria y regresion de retorno.
+- Procesamiento Silver de clasificacion completado (features + `target_updown_t1`).
+- Dataset generado en `data/silver` con nombre versionado por fecha y hora.
+- Estado actual: listo para comenzar entrenamiento baseline con split temporal.

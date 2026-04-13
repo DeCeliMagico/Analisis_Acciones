@@ -56,8 +56,9 @@ python scripts/ingesta/ingesta_masiva.py
 
 ## Siguiente paso
 
-Pasar a Silver:
+Fase de ingesta cerrada para este MVP.
 
-1. Unificar lectura de todos los parquet de Bronze.
-2. Calcular features de retorno, tendencia, volatilidad y volumen.
-3. Crear targets para clasificacion y regresion de retorno t+1.
+Estado posterior:
+
+1. Silver de clasificacion ya generado y validado.
+2. Proximo paso del proyecto: entrenamiento baseline de clasificacion con split temporal.

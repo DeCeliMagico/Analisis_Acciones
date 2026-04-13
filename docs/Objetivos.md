@@ -39,14 +39,27 @@ Mas adelante se podra probar t+5 o t+10.
 
 ## Plan corto de ejecucion
 
-1. Terminar dataset Silver/Features
-2. Entrenar baseline de clasificacion
-3. Evaluar y ajustar features
-4. Entrenar baseline de regresion sobre retorno
-5. Comparar estabilidad y utilidad real de ambos modelos
+1. Entrenar baseline de clasificacion
+2. Evaluar y ajustar features
+3. Entrenar baseline de regresion sobre retorno
+4. Comparar estabilidad y utilidad real de ambos modelos
+
+## Plan de features para entrenamiento
+
+1. Fase 1: empezar con features relativas (retornos, porcentajes, ratios, volatilidad).
+2. Fase 2: probar incluir features absolutas (OHLCV y rangos absolutos) como experimento.
+3. Mantener solo lo que mejore resultados en validacion temporal.
+
+## Regla de escalado
+
+1. Escalado opcional en Fase 1.
+2. Escalado recomendado si se usan features absolutas con modelos lineales.
+3. Ajustar scaler solo con train para evitar fuga de informacion.
 
 ## Checkpoint actual
 
 1. Ingesta diaria completada y validada.
-2. Dataset Bronze listo para pasar a Silver.
-3. Targets definidos: `target_updown_t1` y `target_ret_t1`.
+2. Dataset Bronze consolidado (139 simbolos, 1,324,059 filas).
+3. Dataset Silver de clasificacion completado (1,320,873 filas).
+4. Target de clasificacion operativo: `target_updown_t1`.
+5. Siguiente hito: entrenamiento baseline con split temporal.

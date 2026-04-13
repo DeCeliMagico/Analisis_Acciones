@@ -34,6 +34,16 @@ Como los datos de Yahoo ya vienen razonablemente bien, la limpieza sera minima:
 
 Estas son las mas utiles para empezar, sin meter ruido.
 
+## Nota rapida de nombres
+
+`pct` significa porcentaje (percentage).
+
+Ejemplos:
+
+1. `ret_1d_pct`: retorno diario en %
+2. `gap_pct`: gap en %
+3. `range_pct`: rango de la vela en %
+
 ## 1) Retornos
 
 1. `ret_1d` = cuanto subio o bajo hoy respecto al cierre de ayer (en %)
@@ -101,6 +111,34 @@ Para clasificacion:
 
 Primero: base pequena, limpia y explicable.
 
+## Estrategia por fases para el modelo
+
+## Fase 1 (recomendada para empezar)
+
+Usar sobre todo features relativas/normalizadas por construccion:
+
+1. retornos (`ret_*`)
+2. porcentajes (`*_pct`)
+3. ratios (`ma_ratio`, `vol_ratio`, `price_vs_ma20`)
+4. volatilidad (`volatility_*`)
+
+Ventaja: comparables entre acciones con precios muy distintos.
+
+## Fase 2 (experimento opcional)
+
+Anadir features absolutas de precio/volumen:
+
+1. `open`, `high`, `low`, `close`, `volume`
+2. `gap`, `range_hl`
+
+Estas pueden ayudar, pero tambien meter ruido por escala.
+
+## Escalado (normalizacion)
+
+1. En Fase 1, muchas features ya son relativas; escalado no siempre es critico.
+2. En Fase 2, para modelos lineales/logisticos, conviene escalar.
+3. Si se escala, el scaler se ajusta SOLO con train y luego se aplica a valid/test.
+
 ## Esquema de salida recomendado
 
 Dataset Silver/Features (minimo):
@@ -125,5 +163,19 @@ Dataset Silver/Features (minimo):
 ## Estado actual
 
 Ingesta terminada y corregida en granularidad diaria.
-Lectura de Bronze ya validada (139 simbolos, ~1.32M filas).
-Siguiente fase: implementar features y targets con pandas para clasificacion y regresion de retorno a t+1.
+Lectura de Bronze validada (139 simbolos, 1,324,059 filas).
+Pipeline Silver de clasificacion completado y ejecutado correctamente:
+
+1. Features calculadas por simbolo (retornos, tendencia, volatilidad, volumen).
+2. Target `target_updown_t1` generado por simbolo con control de nulos en bordes.
+3. Limpieza final aplicada para entrenamiento.
+4. Dataset Silver generado: 1,320,873 filas finales.
+
+## Siguiente paso
+
+Entrenamiento baseline de clasificacion binaria:
+
+1. Cargar parquet Silver.
+2. Definir X/y.
+3. Hacer split temporal train/valid/test.
+4. Entrenar y medir metricas base.
