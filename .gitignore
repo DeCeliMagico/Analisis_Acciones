@@ -13,6 +13,12 @@ venv/
 # Data Lake outputs
 /data/
 
+# Model outputs
+/modelos/
+
+#Autogluon outputs
+/AutogluonModels/
+
 # Notebook checkpoints
 .ipynb_checkpoints/
 

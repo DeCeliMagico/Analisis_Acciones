@@ -97,13 +97,16 @@ def entrenar_autogluon(df_train: pd.DataFrame, df_valid: pd.DataFrame, time_limi
 	
 	predictor = TabularPredictor(
 	    label="target_updown_t1",
-	    problem_type="binary"
+	    problem_type="binary",
+		eval_metric="roc_auc",  # ----------------------------------------
 	)
     
 	predictor.fit(
 	    train_data=df_train,
-	    validation_data=df_valid,
-	    time_limit=time_limit
+	    tuning_data=df_valid,
+	    time_limit=time_limit,
+		excluded_model_types=["RF","XT"], # Excluimos modelos innecesarios para ahorrar RAM 
+		num_gpus=0
     )
 	
 	return predictor
@@ -213,7 +216,7 @@ def main() -> None:
 	# 3) Crear y entrenar predictor
 	print("\n[3/5] Creando y entrenando predictor de AutoGluon...")
 	print("Nota: este paso puede tardar dependiendo del time_limit que elijas.")
-	predictor = entrenar_autogluon(df_train, df_valid, time_limit=3600)
+	predictor = entrenar_autogluon(df_train, df_valid, time_limit=300)  # Para prototipado, 5 minutos
 	
 	# 4) Evaluar
 	print("\n[4/5] Evaluando metricas en test...")
