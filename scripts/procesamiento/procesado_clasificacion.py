@@ -88,7 +88,7 @@ def crear_features_clasificacion(df: pd.DataFrame) -> pd.DataFrame:
 	df["vol_ratio"] = df["volume"] / df["vol_ma_20"]
 	df["vol_change_1d"] = (df["volume"] / gb_volume.shift(1)) - 1
 
-	# Target de clasificacion para manana (t+1).
+	# Target de clasificacion para mañana (t+1).
 	next_ret_1d = df.groupby("symbol")["ret_1d"].shift(-1)
 	df["target_updown_t1"] = (next_ret_1d > 0).where(next_ret_1d.notna(), pd.NA).astype("Int64")
 
