@@ -1,5 +1,20 @@
 # Clasificación Binaria con AutoGluon
 
+## Control de ejecución
+
+**Estado**: 🟡 Listo para entrenar (Abril 2026)
+
+- Script: `scripts/entrenamiento/autogluon_clasificacion.py`
+- Dataset: `data/silver/clasificacion_1d_*.parquet` (1.321M filas, 12 features)
+- Instrucciones: [docs/Entrenamiento.md](Entrenamiento.md)
+
+**Comando de ejecución**:
+```bash
+python scripts/entrenamiento/autogluon_clasificacion.py
+```
+
+---
+
 ## Objetivo
 
 Entrenar un modelo que predice si mañana la acción sube (1) o no sube (0).

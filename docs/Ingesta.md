@@ -1,4 +1,15 @@
-# Resumen simple de la ingesta (Yahoo)
+# Ingesta de datos (Yahoo Finance)
+
+## Estado: ✅ COMPLETADO (Abril 2026)
+
+**Output**:
+- 139 símbolos ingestionados (US equity).
+- 1.324M filas de OHLCV históricos.
+- Parquet por símbolo en `data/bronze/`.
+- Granularidad diaria verificada y estable.
+- Próxima fase: [Procesamiento](Procesamiento.md).
+
+---
 
 ## Estado actual
 

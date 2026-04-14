@@ -37,17 +37,45 @@ Mas adelante se podra probar t+5 o t+10.
 2. Modelo de regresion que estime la magnitud del retorno
 3. Ranking de acciones: entre las que se espera que suban, priorizar las de mayor retorno estimado
 
-## Plan corto de ejecucion
+## Estado actual (Abril 2026)
 
-1. Entrenar baseline de clasificacion
-2. Evaluar y ajustar features
-3. Entrenar baseline de regresion sobre retorno
-4. Comparar estabilidad y utilidad real de ambos modelos
+🟡 **Fase 3 - Clasificación**: 
+- Script `scripts/entrenamiento/autogluon_clasificacion.py` **listo para ejecutar**.
+- AutoGluon entrena automáticamente 15+ modelos (XGBoost, LightGBM, CatBoost, NN, etc.).
+- Output: modelo + leaderboard + métricas (Accuracy, AUC, Precision, Recall, F1).
 
-## Plan de features para entrenamiento
+**Ejecución**:
+```bash
+python scripts/entrenamiento/autogluon_clasificacion.py
+```
 
-1. Fase 1: empezar con features relativas (retornos, porcentajes, ratios, volatilidad).
-2. Fase 2: probar incluir features absolutas (OHLCV y rangos absolutos) como experimento.
+## Plan de ejecucion
+
+**Corto plazo (próximos días)**:
+1. ✅ Entrenar baseline de clasificación (en marcha).
+2. Evaluar AUC y métricas en test.
+3. Documentar feature importance (cuáles features importan más).
+
+**Mediano plazo**:
+4. Entrenar baseline de regresión sobre retorno.
+5. Comparar estabilidad: ¿cuál modelo es más confiable?
+6. Decidir: ¿solo clasificación o ensemble?
+
+## Features disponibles (12 en Silver)
+
+**Retornos**: ret_1d, ret_5d, ret_10d  
+**Tendencia**: ma_ratio, price_vs_ma20  
+**Volatilidad**: volatility_10d, volatility_20d  
+**Gap/Rango**: gap_prop, range_prop  
+**Volumen**: vol_ratio, vol_change_1d  
+
+Siguientes iteraciones: agregar features técnicas adicionales si es necesario.
+
+## Métricas de éxito
+
+- AUC > 0.55: modelo aprende algo útil.
+- AUC > 0.60: señal confiable para trading.
+- AUC > 0.65: potencial de retorno real.
 3. Mantener solo lo que mejore resultados en validacion temporal.
 
 ## Regla de escalado

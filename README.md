@@ -84,19 +84,37 @@ Estrategia de decisión local vs distribuido:
 └─ tests/
 ```
 
+## Status actual (Abril 2026)
+
+✅ **Completado**:
+- Bronze: 139 símbolos, 1.324M filas, granularidad diaria.
+- Silver: 1.321M filas procesadas, 12 features + target_updown_t1 (clasificación binaria).
+  
+🟡 **En curso**:
+- Entrenamiento de clasificador binario con AutoGluon baseline.
+  - Split temporal: 70% train / 15% valid / 15% test.
+  - Tiempo estimado: ~1 hora (ajustable con time_limit).
+  - Salida: modelo en `modelos/Market_AI_*`, métricas en `evaluaciones/metricas_clasificacion.json`.
+
+⏳ **Próximas fases**:
+- Evaluación de rendimiento (AUC, precision, recall, F1).
+- Regresión de retornos (target_ret_t1).
+- Ensemble clasificación + regresión para ranking final.
+
 ## Documentos de trabajo actuales
 
-- `docs/Ingesta.md`: resumen simple de la ingesta y estado actual.
-- `docs/Procesamiento.md`: plan de features y procesamiento Silver.
-- `docs/Objetivos.md`: objetivos de modelado (clasificacion y regresion).
+- `docs/Ingesta.md`: resumen de ingesta y estado.
+- `docs/Procesamiento.md`: feature engineering y limpieza.
+- `docs/clasificacion_binaria.md`: AutoGluon, métricas, interpretación.
+- `docs/Entrenamiento.md`: instrucciones de ejecución del pipeline.
+- `docs/Objetivos.md`: mapa de fases y resultados esperados.
 
 ## Roadmap por fases
 
-1. Fase 0: diseño de contrato de datos y catálogo de símbolos.
-2. Fase 1: ingesta histórica masiva (2+ fuentes) y carga Bronze.
-3. Fase 2: limpieza + normalización a Silver.
-4. Fase 3: dataset Gold y primer dashboard BI (opcional).
-5. Fase 4: baseline de regresión y evaluación temporal.
+1. ✅ Fase 0-2: ingesta Bronze + procesamiento Silver.
+2. 🟡 Fase 3: entrenamiento clasificación + evaluación.
+3. ⏳ Fase 4: modelo de regresión y optimización.
+4. ⏳ Fase 5: ensemble final y producción.
 
 ## Criterios de calidad de datos
 

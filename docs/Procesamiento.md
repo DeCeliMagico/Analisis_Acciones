@@ -1,4 +1,14 @@
-# Procesamiento de datos (fase actual)
+# Procesamiento de datos
+
+## Estado: ✅ COMPLETADO (Abril 2026)
+
+**Output**: 
+- 1.321M filas procesadas (99.76% retención).
+- 12 features + target_updown_t1.
+- Parquet guardado con timestamp: `data/silver/clasificacion_1d_13-04-26_202117.parquet`.
+- Próxima fase: [Entrenamiento](Entrenamiento.md).
+
+---
 
 ## Decision tecnica
 
