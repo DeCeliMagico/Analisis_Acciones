@@ -98,15 +98,18 @@ def entrenar_autogluon(df_train: pd.DataFrame, df_valid: pd.DataFrame, time_limi
 	predictor = TabularPredictor(
 	    label="target_updown_t1",
 	    problem_type="binary",
-		eval_metric="roc_auc",  # ----------------------------------------
+		eval_metric="roc_auc",
 	)
     
 	predictor.fit(
 	    train_data=df_train,
-	    tuning_data=df_valid,
+	    #tuning_data=df_valid,
+		presets="medium_quality",
+		num_bag_folds=5,
+		num_stack_levels=0,
 	    time_limit=time_limit,
-		excluded_model_types=["RF","XT"], # Excluimos modelos innecesarios para ahorrar RAM 
-		num_gpus=0
+		#use_bag_holdout=True,
+		num_gpus=1,
     )
 	
 	return predictor
