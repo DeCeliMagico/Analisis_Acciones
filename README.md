@@ -112,8 +112,8 @@ Estrategia de decisión local vs distribuido:
 ## Roadmap por fases
 
 1. ✅ Fase 0-2: ingesta Bronze + procesamiento Silver.
-2. 🟡 Fase 3: entrenamiento clasificación + evaluación.
-3. ⏳ Fase 4: modelo de regresión y optimización.
+2. 🟡 Fase 3: entrenamiento clasificación + regresión en paralelo (Mayo 2026).
+3. ⏳ Fase 4: comparación de modelos y optimización.
 4. ⏳ Fase 5: ensemble final y producción.
 
 ## Criterios de calidad de datos
@@ -128,6 +128,8 @@ Estrategia de decisión local vs distribuido:
 - Ingesta individual y masiva ya implementadas con Yahoo Finance.
 - Datos guardados en `data/bronze` en formato Parquet.
 - Ingesta diaria corregida con `period1/period2` (evitando downsampling de Yahoo).
-- Procesamiento Silver de clasificacion completado (features + `target_updown_t1`).
-- Dataset generado en `data/silver` con nombre versionado por fecha y hora.
-- Estado actual: listo para comenzar entrenamiento baseline con split temporal.
+- Procesamiento Silver con **dos pipelines** (Mayo 2026):
+  - **Clasificación**: target binario `target_updown_t1` (sube/no sube).
+  - **Regresión**: target continuo `target_ret_log_t1` (retorno logarítmico).
+- Datasets generados en `data/silver` con nombre versionado por fecha y hora.
+- Estado actual: listo para entrenar modelos con split temporal en ambas tareas.

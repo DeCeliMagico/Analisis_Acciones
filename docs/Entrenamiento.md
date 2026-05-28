@@ -1,18 +1,34 @@
-# Entrenamiento: Clasificación Binaria con AutoGluon
+# Entrenamiento: Clasificación y Regresión con AutoGluon
 
 ## Resumen
 
-Fase 3 del proyecto: entrenar un modelo que predice si mañana la acción sube (1) o no sube (0).
+Fase 3 del proyecto: entrenar dos modelos en paralelo.
 
+- **Clasificación**: predice si mañana sube (1) o no (0).
+- **Regresión**: predice el retorno logarítmico exacto del día siguiente.
+
+**Ambos**:
 - **Dataset**: Silver (1.321M filas, 12 features + target).
 - **Algoritmo**: AutoML con AutoGluon (selecciona automáticamente el mejor modelo).
 - **Validación**: split temporal 70% train / 15% valid / 15% test (sin shuffle).
-- **Tiempo**: ~1 hora en máquina media (ajustable).
+- **Tiempo**: ~1 hora por modelo en máquina media (ajustable).
 - **Output**: modelo guardado + métricas JSON + leaderboard.
 
 ---
 
 ## Ejecución
+
+### Paso 0: Generar datos Silver
+
+**Clasificación**:
+```bash
+python scripts/procesamiento/procesado_clasificacion.py
+```
+
+**Regresión**:
+```bash
+python scripts/procesamiento/procesado_regresion.py
+```
 
 ### Paso 1: Instalar dependencias
 
@@ -26,15 +42,14 @@ Verifica que incluye:
 
 ### Paso 2: Ejecutar entrenamiento
 
-```bash
-cd scripts/entrenamiento
-python autogluon_clasificacion.py
-```
-
-O desde la raíz:
-
+**Clasificación** (predecir sube/no sube):
 ```bash
 python scripts/entrenamiento/autogluon_clasificacion.py
+```
+
+**Regresión** (predecir retorno log continuo):
+```bash
+python scripts/entrenamiento/autogluon_regresion.py
 ```
 
 ### Paso 3: Esperar a que termine

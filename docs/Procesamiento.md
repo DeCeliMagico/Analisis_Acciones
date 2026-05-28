@@ -1,11 +1,13 @@
 # Procesamiento de datos
 
-## Estado: ✅ COMPLETADO (Abril 2026)
+## Estado: ✅ ACTUALIZADO (Mayo 2026)
 
-**Output**: 
+**Outputs disponibles**: 
 - 1.321M filas procesadas (99.76% retención).
-- 12 features + target_updown_t1.
-- Parquet guardado con timestamp: `data/silver/clasificacion_1d_13-04-26_202117.parquet`.
+- 12 features + **dos targets**:
+  - `target_updown_t1`: clasificación (1/0 si sube o no).
+  - `target_ret_log_t1`: regresión (retorno logarítmico continuo).
+- Parquets guardados con timestamp en `data/silver/`.
 - Próxima fase: [Entrenamiento](Entrenamiento.md).
 
 ---
@@ -103,15 +105,19 @@ Ejemplos:
 
 ## 6) Etiquetas objetivo (targets)
 
-Para regresion:
+### Regresión (nuevo - Mayo 2026)
 
-1. `target_ret_t1` = retorno de manana
-	- Para que sirve: estimar cuanto puede subir o bajar.
+1. `target_ret_log_t1` = log(Close_{t+1} / Close_t)
+	- Para que sirve: predecir la magnitud exacta del retorno (continuo).
+	- Generado en: `procesado_regresion.py`
+	- Output: `data/silver/regresion_1d_<timestamp>.parquet`
 
-Para clasificacion:
+### Clasificación
 
-1. `target_updown_t1` = 1 si target_ret_t1 > 0, 0 en caso contrario
-	- Para que sirve: predecir direccion (sube o no sube).
+1. `target_updown_t1` = 1 si retorno > 0, 0 en caso contrario
+	- Para que sirve: predecir solo dirección (sube/no sube).
+	- Generado en: `procesado_clasificacion.py`
+	- Output: `data/silver/clasificacion_1d_<timestamp>.parquet`
 
 ## Que NO meter de momento (ruido o complejidad extra)
 

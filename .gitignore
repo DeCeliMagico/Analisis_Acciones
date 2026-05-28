@@ -16,11 +16,17 @@ venv/
 # Model outputs
 /modelos/
 
+# Evaluation metrics
+/evaluaciones/
+
 #Autogluon outputs
 /AutogluonModels/
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+
+# Refact cache
+.refact/
 
 # OS/editor
 .DS_Store
