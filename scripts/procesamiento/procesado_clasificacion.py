@@ -69,7 +69,10 @@ def crear_features_clasificacion(df: pd.DataFrame) -> pd.DataFrame:
 	gb_ret_1d = df.groupby("symbol")["ret_1d"]
 
 	# Volatilidad (std de retornos) y volumen relativo.
-	df["volatility_20d"] = gb_ret_1d.transform(lambda s: s.rolling(20).std())
+	df["volatility_20d"] = (
+    gb_ret_1d
+    .transform(lambda s: s.rolling(20).std().shift(1))
+	)
 
 	# Group by simbolo de volume para volumen relativo.
 	gb_volume = df.groupby("symbol")["volume"]
@@ -78,17 +81,11 @@ def crear_features_clasificacion(df: pd.DataFrame) -> pd.DataFrame:
 
 	# Target de clasificacion
 
-	# Retorno futuro
-	next_ret = df.groupby("symbol")["close"].shift(-1) / df["close"] - 1
+	next_ret = (
+    df.groupby("symbol")["close"].shift(-1) / df["close"] - 1
+	)
 
-	# Volatilidad histórica (ruido típico del activo)
-	volatilidad = df.groupby("symbol")["ret_1d"].transform(lambda x: x.rolling(50).std())
-
-	# Threshold dinámico (ajuste simple y efectivo)
-	threshold = volatilidad * 0.1
-
-	# Target final
-	df["target_updown_t1"] = (next_ret > threshold).where(next_ret.notna(), pd.NA).astype("Int64")
+	df["target_updown_t1"] = (next_ret > 0).astype("Int64")
 
 	# Evita que divisiones por cero pasen al modelo como +/-inf.
 	df = df.replace([np.inf, -np.inf], np.nan)
