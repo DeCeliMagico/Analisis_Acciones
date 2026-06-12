@@ -1,9 +1,12 @@
 requests>=2.31.0
 pandas>=2.1.0
 pyarrow>=14.0.0
+numpy>=1.24.0
 autogluon[tabular]>=1.0.0
 scikit-learn>=1.3.0
 fastai>=2.7.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
 
 # autogluon por defecto instala pytorch only para CPU, si quieres usar GPU, instala pytorch con soporte CUDA manualmente
 # para ello pon en la terminal los siguientes comandos:

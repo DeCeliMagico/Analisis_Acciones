@@ -34,19 +34,35 @@ def cargar_silver() -> pd.DataFrame:
 
 
 # Seleccionar top tickers por volumen
-def seleccionar_top_tickers(df: pd.DataFrame, n: int = 10) -> list:
+def seleccionar_top_tickers(df: pd.DataFrame, n: int = 10, excluir: list = None, incluir_si_no_top: list = None) -> list:
 	"""Selecciona los top N tickers por volumen promedio.
 	
 	Parametros:
 		df: dataset con columna 'symbol'
 		n: cantidad de tickers a seleccionar
+		excluir: lista de tickers a excluir (ej: ['AMZN', 'GOOGL'])
+		incluir_si_no_top: lista de tickers a forzar inclusión aunque no sean top N
 	
 	Retorna:
 		lista de n tickers con mayor volumen promedio
 	"""
 	
+	if excluir is None:
+		excluir = []
+	if incluir_si_no_top is None:
+		incluir_si_no_top = []
+	
 	vol_promedio = df.groupby("symbol")["volume"].mean().sort_values(ascending=False)
-	top_tickers = vol_promedio.head(n).index.tolist()
+	
+	# Obtener top tickers excluyendo los especificados
+	# Si hay tickers a forzar, reducir N para hacer espacio
+	n_sin_forzados = n - len([t for t in incluir_si_no_top if t in vol_promedio.index])
+	top_tickers = [t for t in vol_promedio.head(n_sin_forzados + len(excluir)).index if t not in excluir][:n_sin_forzados]
+	
+	# Agregar tickers forzados si existen en los datos
+	for ticker in incluir_si_no_top:
+		if ticker in vol_promedio.index:
+			top_tickers.append(ticker)
 	
 	print(f"Top {n} tickers por volumen promedio:")
 	for ticker in top_tickers:
@@ -82,7 +98,7 @@ def hacer_split_temporal_ticker(df_ticker: pd.DataFrame, train_pct: float = 0.7,
 
 
 # Entrenar AutoGluon para un ticker
-def entrenar_modelo_ticker(df_train: pd.DataFrame, df_valid: pd.DataFrame, ticker: str, time_limit: int = 120) -> TabularPredictor:
+def entrenar_modelo_ticker(df_train: pd.DataFrame, df_valid: pd.DataFrame, ticker: str, time_limit: int = 120, modelo_path: str = None) -> TabularPredictor:
 	"""Entrena AutoGluon para un ticker específico.
 	
 	Parametros:
@@ -90,6 +106,7 @@ def entrenar_modelo_ticker(df_train: pd.DataFrame, df_valid: pd.DataFrame, ticke
 		df_valid: datos de validacion
 		ticker: nombre del ticker (para nombrar el modelo)
 		time_limit: segundos máximo de entrenamiento
+		modelo_path: ruta donde guardar el modelo
 	
 	Retorna:
 		predictor entrenado
@@ -99,7 +116,8 @@ def entrenar_modelo_ticker(df_train: pd.DataFrame, df_valid: pd.DataFrame, ticke
 	    label="target_ret_log_t5",
 	    problem_type="regression",
 		eval_metric="rmse",
-		verbosity=0
+		verbosity=0,
+		path=modelo_path
 	)
     
 	predictor.fit(
@@ -177,7 +195,8 @@ def main() -> None:
 	
 	# 2) Seleccionar top tickers
 	print("\n[2/3] Seleccionando top 10 tickers...")
-	top_tickers = seleccionar_top_tickers(df, n=10)
+	# Excluir AAPL, INTC, META, QCOM (bajo performance) y AMZN, GOOGL (original)
+	top_tickers = seleccionar_top_tickers(df, n=10, excluir=['AMZN', 'GOOGL', 'AAPL', 'INTC', 'META', 'QCOM'])
 	
 	# 3) Entrenar modelo por ticker
 	print("\n[3/3] Entrenando modelos por ticker...")
@@ -204,15 +223,12 @@ def main() -> None:
 		
 		# Entrenar
 		try:
-			predictor = entrenar_modelo_ticker(df_train, df_valid, ticker, time_limit=120)
+			model_path = modelos_dir / f"Market_AI_Ticker_{ticker}_{fecha_ejecucion}"
+			predictor = entrenar_modelo_ticker(df_train, df_valid, ticker, time_limit=120, modelo_path=str(model_path))
 			
 			# Evaluar
 			metricas = evaluar_ticker(df_test["target_ret_log_t5"], predictor, df_test)
 			print(f"  Dir.Acc: {metricas['accuracy_direccion']:.2%} | Corr: {metricas['correlation']:.4f} | Rel.RMSE: {metricas['relative_rmse']:.4f}")
-			
-			# Guardar modelo
-			model_path = modelos_dir / f"Market_AI_Ticker_{ticker}_{fecha_ejecucion}"
-			predictor.save(str(model_path))
 			
 			# Registro de resultados
 			resultados_todos[ticker] = metricas

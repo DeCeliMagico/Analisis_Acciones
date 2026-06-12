@@ -28,6 +28,9 @@ COLS_TRAIN = [
 	"range_norm",
 	"price_vs_ma20",
 	"volatility_5d",
+	"volatility_20d",
+	"rsi",
+	"macd",
 	"target_ret_log_t5",
 ]
 
@@ -71,6 +74,44 @@ def crear_features_regresion(df: pd.DataFrame) -> pd.DataFrame:
 
 	# Volatilidad (std de retornos) y volumen relativo.
 	df["volatility_5d"] = gb_ret_1d.transform(lambda s: s.rolling(5).std())
+	df["volatility_20d"] = gb_ret_1d.transform(lambda s: s.rolling(20).std())
+
+	# RSI (Relative Strength Index) - mide momentum
+	def calcular_rsi(prices, period=14):
+		"""Calcula RSI basado en cambios de precio."""
+		deltas = prices.diff()
+		seed = deltas[:period+1]
+		up = seed[seed >= 0].sum() / period
+		down = -seed[seed < 0].sum() / period
+		rs = up / down if down != 0 else 0
+		rsi = np.zeros_like(prices)
+		rsi[:period] = 100. - 100. / (1. + rs)
+		
+		for i in range(period, len(prices)):
+			delta = deltas.iloc[i]
+			if delta > 0:
+				up = (up * (period - 1) + delta) / period
+				down = down * (period - 1) / period
+			else:
+				up = up * (period - 1) / period
+				down = (down * (period - 1) - delta) / period
+			
+			rs = up / down if down != 0 else 0
+			rsi[i] = 100. - 100. / (1. + rs)
+		
+		return pd.Series(rsi, index=prices.index)
+	
+	df["rsi"] = gb_close.transform(lambda s: calcular_rsi(s, period=14))
+	
+	# MACD (Moving Average Convergence Divergence)
+	def calcular_macd(prices):
+		"""Calcula MACD (diferencia entre EMA12 y EMA26)."""
+		ema12 = prices.ewm(span=12).mean()
+		ema26 = prices.ewm(span=26).mean()
+		macd = ema12 - ema26
+		return macd
+	
+	df["macd"] = gb_close.transform(lambda s: calcular_macd(s))
 
 	# Group by simbolo de volume para volumen relativo.
 	gb_volume = df.groupby("symbol")["volume"]
