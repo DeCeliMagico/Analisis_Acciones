@@ -2,6 +2,11 @@
 
 Objetivo: crear dataset Silver para predecir retorno logaritmico 5 dias adelante.
 Target: retorno log puro sin umbral (regresion continua), horizonte: +5 dias.
+
+CAMBIOS IMPORTANTES:
+- ma_20: sintaxis más clara con shift(1)
+- price_vs_ma20: usa close_prev en lugar de close (sin data leakage)
+- preparar_para_entrenamiento(): filtra explícitamente para evitar open/high/low
 """
 
 from pathlib import Path
@@ -31,6 +36,7 @@ COLS_TRAIN = [
 	"volatility_20d",
 	"rsi",
 	"macd",
+	"volume",
 	"target_ret_log_t5",
 ]
 
@@ -63,18 +69,21 @@ def crear_features_regresion(df: pd.DataFrame) -> pd.DataFrame:
 	
 
 	# Medias moviles y ratios de tendencia.
-	df["ma_20"] = gb_close.transform(lambda s: s.rolling(20).mean().shift(1))
-	df["price_vs_ma20"] = df["close"] / df["ma_20"]
+	# CAMBIO: sintaxis más clara - shift se aplica DESPUÉS del rolling
+	df["ma_20"] = gb_close.transform(lambda s: s.rolling(20).mean()).shift(1)
+	
+	# CAMBIO: usar close_prev en lugar de close para evitar data leakage de HOY
+	df["price_vs_ma20"] = df["close_prev"] / df["ma_20"]
 
-	# Rango en proporcion
+	# Rango en proporcion (está OK, el rango de HOY es información válida al cierre)
 	df["range_norm"] = (df["high"] - df["low"]) / df["ma_20"]
 
 	# Group by simbolo de ret_1d para volatilidad.
 	gb_ret_1d = df.groupby("symbol")["ret_1d"]
 
-	# Volatilidad (std de retornos) y volumen relativo.
-	df["volatility_5d"] = gb_ret_1d.transform(lambda s: s.rolling(5).std())
-	df["volatility_20d"] = gb_ret_1d.transform(lambda s: s.rolling(20).std())
+	# Volatilidad (std de retornos) con shift para no incluir retorno de HOY
+	df["volatility_5d"] = gb_ret_1d.transform(lambda s: s.rolling(5).std().shift(1))
+	df["volatility_20d"] = gb_ret_1d.transform(lambda s: s.rolling(20).std().shift(1))
 
 	# RSI (Relative Strength Index) - mide momentum
 	def calcular_rsi(prices, period=14):
@@ -128,6 +137,40 @@ def crear_features_regresion(df: pd.DataFrame) -> pd.DataFrame:
 	return df
 
 
+def preparar_para_entrenamiento(df: pd.DataFrame) -> pd.DataFrame:
+	"""Filtra columnas ANTES de entrenar para evitar data leakage.
+	
+	Elimina:
+	- open, high, low: información de HOY (problema en MSFT, NVDA, ORCL)
+	- close: información de HOY
+	- vol_ma_20: no está en COLS_TRAIN
+	- ma_20: variable intermedia, no necesaria en modelo final
+	
+	Mantiene:
+	- Features correctos (sin data leakage)
+	- Target
+	"""
+	
+	cols_permitidas = [
+		"symbol",
+		"ts_event_utc",
+		"ret_1d",
+		"ret_3d",
+		"gap_prop",
+		"range_norm",
+		"price_vs_ma20",
+		"volatility_5d",
+		"volatility_20d",
+		"rsi",
+		"macd",
+		"volume",
+		"vol_ma_20",
+		"target_ret_log_t5",
+	]
+	
+	return df[cols_permitidas].copy()
+
+
 def limpiar_para_entrenamiento(df: pd.DataFrame) -> pd.DataFrame:
 	"""Elimina nulos de columnas necesarias para entrenar regresion."""
 	return df.dropna(subset=COLS_TRAIN).copy()
@@ -145,6 +188,7 @@ def guardar_silver(df: pd.DataFrame) -> None:
 	df.to_parquet(output_path, index=False)
 	print(f"Dataset Silver guardado: {output_path}")
 	print(f"Filas finales: {len(df)}")
+	print(f"Columnas guardadas: {list(df.columns)}")
 
 
 def main() -> None:
@@ -156,6 +200,13 @@ def main() -> None:
 
 	# Crea features + target de regresion.
 	df_proc = crear_features_regresion(df)
+	
+	# NUEVO: Filtra columnas para evitar data leakage
+	print("\n[FILTRACIÓN] Eliminando columnas con data leakage...")
+	print(f"  Antes: {len(df_proc.columns)} columnas")
+	df_proc = preparar_para_entrenamiento(df_proc)
+	print(f"  Después: {len(df_proc.columns)} columnas")
+	print(f"  Columnas finales: {list(df_proc.columns)}")
 
 	# Limpia para entrenamiento
 	df_train = limpiar_para_entrenamiento(df_proc)
