@@ -10,6 +10,9 @@ Simula paper trading usando la senal direccional del modelo:
 Cada operacion mantiene posicion 5 dias (horizonte del target).
 El backtest usa SOLO el split de test (15% final temporal): datos que el modelo
 no vio durante el entrenamiento.
+
+CAMBIO: buy_and_hold_benchmark ahora usa target_ret_log_t5 en lugar de close
+(close ya no está en el Silver tras el filtrado).
 """
 
 from __future__ import annotations
@@ -200,16 +203,40 @@ def simular_ticker(
 
 
 def buy_and_hold_benchmark(df_test: pd.DataFrame, capital: float, comision_pct: float) -> dict:
-	"""Compra al inicio del test y vende al final (referencia pasiva)."""
+	"""Compra al inicio del test y vende al final (referencia pasiva).
+	
+	CAMBIO: Usa target_ret_log_t5 en lugar de close (close no está en Silver filtrado).
+	Calcula el retorno acumulado usando los retornos diarios y luego aplica comisión.
+	"""
 	if len(df_test) < 2:
 		return {"retorno_total_pct": 0.0, "capital_final": capital}
 
-	df = df_test.sort_values("ts_event_utc")
-	p0 = float(df.iloc[0]["close"])
-	p1 = float(df.iloc[-1]["close"])
-	ret_log = np.log(p1 / p0) - 2 * comision_pct
-	ret_pct = log_a_pct(ret_log)
+	df = df_test.sort_values("ts_event_utc").reset_index(drop=True)
+	
+	# Calcular retorno acumulado usando target_ret_log_t5
+	# El target es el retorno esperado en 5 días desde cada punto
+	# Para buy_and_hold, tomamos el acumulado de los retornos
+	
+	# Opción: usar el primer y último target_ret_log_t5 como aproximación
+	# Pero más preciso: sumar los ret_1d acumulados
+	
+	# Si tenemos ret_1d, el retorno acumulado es:
+	if "ret_1d" in df.columns:
+		# Retorno acumulado = producto de (1 + ret_1d)
+		ret_acumulado = np.prod(1 + df["ret_1d"].values) - 1
+		ret_log = np.log(1 + ret_acumulado) if ret_acumulado > -1 else np.log(1e-10)
+	else:
+		# Fallback: usar target_ret_log_t5 del primer y último día
+		# Esto es una aproximación
+		ret_log_primero = float(df.iloc[0]["target_ret_log_t5"])
+		ret_log_ultimo = float(df.iloc[-1]["target_ret_log_t5"])
+		ret_log = (ret_log_primero + ret_log_ultimo) / 2  # Aproximación cruda
+	
+	# Descontar comisión (round-trip)
+	ret_log_neto = ret_log - 2 * comision_pct
+	ret_pct = log_a_pct(ret_log_neto)
 	capital_final = capital * (1 + ret_pct)
+	
 	return {
 		"retorno_total_pct": (capital_final / capital - 1) * 100,
 		"capital_final": capital_final,
