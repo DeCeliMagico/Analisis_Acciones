@@ -23,7 +23,7 @@ def cargar_silver() -> pd.DataFrame:
 	"""
 	
 	project_root = Path(__file__).resolve().parents[2]
-	silver_dir = project_root / "data" / "silver"
+	silver_dir = project_root / "data" / "silver" / "regresion"
 	archivos = list(silver_dir.glob("regresion_5d_*.parquet"))
 	if not archivos:
 		raise FileNotFoundError(f"No se encontraron archivos Silver de regresion (5d) en: {silver_dir}")
@@ -175,7 +175,7 @@ def guardar_modelo_y_resultados(predictor, metricas: dict, df_train: pd.DataFram
 	
 	project_root = Path(__file__).resolve().parents[2]
 	
-	modelos_dir = project_root / "modelos"
+	modelos_dir = project_root / "modelos" / "regresion"
 	evaluaciones_dir = project_root / "evaluaciones"
 	modelos_dir.mkdir(parents=True, exist_ok=True)
 	evaluaciones_dir.mkdir(parents=True, exist_ok=True)

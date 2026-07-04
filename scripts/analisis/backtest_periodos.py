@@ -28,8 +28,8 @@ import pandas as pd
 from autogluon.tabular import TabularPredictor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODELOS_DIR = PROJECT_ROOT / "modelos"
-SILVER_DIR = PROJECT_ROOT / "data" / "silver"
+MODELOS_DIR = PROJECT_ROOT / "modelos" / "regresion"
+SILVER_DIR = PROJECT_ROOT / "data" / "silver" / "regresion"
 EVAL_DIR = PROJECT_ROOT / "evaluaciones"
 
 HORIZON_DAYS = 5
@@ -313,7 +313,8 @@ def imprimir_resumen(resultados: dict) -> None:
 	print("BACKTEST PAPER TRADING (periodo TEST, out-of-sample)")
 	print("=" * 90)
 	cfg = resultados["config"]
-	print(f"Modo: {cfg['modo']} | Capital inicial: ${cfg['capital_inicial']:,.0f} | Comision: {cfg['comision_pct']*100:.2f}% por lado")
+	umbral_str = f" | Umbral |pred|>{cfg['min_pred_abs']:.4f}" if cfg['min_pred_abs'] > 0 else ""
+	print(f"Modo: {cfg['modo']} | Capital inicial: ${cfg['capital_inicial']:,.0f} | Comision: {cfg['comision_pct']*100:.2f}% por lado{umbral_str}")
 	print(f"Horizonte: {resultados['horizonte_dias']} dias | {resultados['periodo']}")
 	print(f"Período custom: {resultados['periodo_custom']}")
 	print()
@@ -373,6 +374,12 @@ def main() -> None:
 		default=None,
 		help="Fecha fin test custom (YYYY-MM-DD)",
 	)
+	parser.add_argument(
+		"--umbral",
+		type=float,
+		default=0.0,
+		help="Umbral mínimo |pred| para operar (ej: 0.005). 0 = sin filtro",
+	)
 	args = parser.parse_args()
 
 	tickers = [t.strip() for t in args.tickers.split(",") if t.strip()] or None
@@ -381,6 +388,7 @@ def main() -> None:
 		comision_pct=args.comision,
 		modo=args.modo,
 		tickers=tickers,
+		min_pred_abs=args.umbral,
 		fecha_inicio_test=args.fecha_inicio,
 		fecha_fin_test=args.fecha_fin,
 	)

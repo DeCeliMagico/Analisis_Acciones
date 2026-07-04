@@ -14,6 +14,60 @@ import json
 from datetime import datetime
 
 
+LABEL = "target_ret_log_t5"
+
+# Features que ve el modelo. Se seleccionan EXPLÍCITAMENTE para que AutoGluon
+# NO reciba symbol/ts_event_utc/volume crudo:
+#  - ts_event_utc generaría features de año/timestamp monótonos → en test caen
+#    fuera del rango de train y los árboles no extrapolan (daña out-of-sample).
+#  - La estacionalidad útil ya va como mes_sin/cos y dow_sin/cos (cíclicas).
+#  - volume crudo no es estacionario → usamos volume_rel.
+FEATURES = [
+	"ret_1d",
+	"ret_3d",
+	"ret_10d",
+	"ret_20d",
+	"ret_60d",
+	"gap_prop",
+	"range_norm",
+	"price_vs_ma20",
+	"bb_position",
+	"dist_52w_high",
+	"volatility_5d",
+	"volatility_20d",
+	"rsi",
+	"macd_norm",
+	"volume_rel",
+	"obv_ratio",
+	"spy_ret_1d",
+	"spy_ret_5d",
+	"spy_ret_20d",
+	"ret_rel_spy_1d",
+	"ret_rel_spy_5d",
+	"vix_level",
+	"vix_change_1d",
+	"vix_change_5d",
+	"mes_sin",
+	"mes_cos",
+	"dow_sin",
+	"dow_cos",
+]
+
+
+def preparar_split_para_fit(df_split: pd.DataFrame) -> pd.DataFrame:
+	"""Selecciona features + target y añade sample_weight por recencia.
+
+	El peso crece linealmente de 0.5 (fila más antigua) a 1.0 (más reciente),
+	para que el modelo priorice el régimen de mercado actual sin ignorar el
+	histórico. Respeta el orden temporal del split.
+	"""
+	df_split = df_split.sort_values("ts_event_utc").reset_index(drop=True)
+	out = df_split[FEATURES + [LABEL]].copy()
+	n = len(out)
+	out["sample_weight"] = np.linspace(0.5, 1.0, n) if n > 1 else 1.0
+	return out
+
+
 # Cargar datos Silver de regresion
 def cargar_silver() -> pd.DataFrame:
 	"""Carga el parquet de regresion generado en la fase anterior.
@@ -23,7 +77,7 @@ def cargar_silver() -> pd.DataFrame:
 	"""
 	
 	project_root = Path(__file__).resolve().parents[2]
-	silver_dir = project_root / "data" / "silver"
+	silver_dir = project_root / "data" / "silver" / "regresion"
 	archivos = list(silver_dir.glob("regresion_5d_*.parquet"))
 	if not archivos:
 		raise FileNotFoundError(f"No se encontraron archivos Silver de regresion (5d) en: {silver_dir}")
@@ -98,36 +152,40 @@ def hacer_split_temporal_ticker(df_ticker: pd.DataFrame, train_pct: float = 0.7,
 
 
 # Entrenar AutoGluon para un ticker
-def entrenar_modelo_ticker(df_train: pd.DataFrame, df_valid: pd.DataFrame, ticker: str, time_limit: int = 120, modelo_path: str = None) -> TabularPredictor:
-	"""Entrena AutoGluon para un ticker específico.
-	
+def entrenar_modelo_ticker(df_fit: pd.DataFrame, ticker: str, time_limit: int = 500, modelo_path: str = None) -> TabularPredictor:
+	"""Entrena AutoGluon (best_quality) para un ticker específico.
+
 	Parametros:
-		df_train: datos de entrenamiento
-		df_valid: datos de validacion
+		df_fit: 85% temporal (train+valid) con features + target + sample_weight
 		ticker: nombre del ticker (para nombrar el modelo)
 		time_limit: segundos máximo de entrenamiento
 		modelo_path: ruta donde guardar el modelo
-	
+
 	Retorna:
 		predictor entrenado
 	"""
 	
 	predictor = TabularPredictor(
-	    label="target_ret_log_t5",
+	    label=LABEL,
 	    problem_type="regression",
 		eval_metric="rmse",
+		sample_weight="sample_weight",  # columna de pesos por recencia
 		verbosity=0,
 		path=modelo_path
 	)
-    
+
 	predictor.fit(
-	    train_data=df_train,
-	    tuning_data=df_valid,
+	    train_data=df_fit,
 	    time_limit=time_limit,
-		excluded_model_types=["RF","XT"],
+		# best_quality: bagging + stacking + redes neuronales (máxima precisión).
+		# No se pasa tuning_data: AutoGluon hace su CV interna sobre el 85%.
+		# El 15% de test queda intacto para el backtest (juez out-of-sample real);
+		# la mezcla temporal del k-fold interno no afecta a ese bloque futuro.
+		presets="best_quality",
+		excluded_model_types=["RF","XT"],  # ahorro de RAM
 		num_gpus=0
     )
-	
+
 	return predictor
 
 
@@ -202,7 +260,7 @@ def main() -> None:
 	print("\n[3/3] Entrenando modelos por ticker...")
 	
 	project_root = Path(__file__).resolve().parents[2]
-	modelos_dir = project_root / "modelos"
+	modelos_dir = project_root / "modelos" / "regresion"
 	evaluaciones_dir = project_root / "evaluaciones"
 	modelos_dir.mkdir(parents=True, exist_ok=True)
 	evaluaciones_dir.mkdir(parents=True, exist_ok=True)
@@ -217,14 +275,17 @@ def main() -> None:
 		df_ticker = df[df["symbol"] == ticker].copy()
 		print(f"  Filas: {len(df_ticker)}")
 		
-		# Split temporal
+		# Split temporal: 85% (train+valid) para entrenar, 15% final para test/backtest
 		df_train, df_valid, df_test = hacer_split_temporal_ticker(df_ticker)
-		print(f"  Train: {len(df_train)} | Valid: {len(df_valid)} | Test: {len(df_test)}")
-		
+		print(f"  Train+Valid: {len(df_train) + len(df_valid)} | Test: {len(df_test)}")
+
+		# Combinar 85%, seleccionar features y añadir sample_weight por recencia
+		df_fit = preparar_split_para_fit(pd.concat([df_train, df_valid]))
+
 		# Entrenar
 		try:
 			model_path = modelos_dir / f"Market_AI_Ticker_{ticker}_{fecha_ejecucion}"
-			predictor = entrenar_modelo_ticker(df_train, df_valid, ticker, time_limit=120, modelo_path=str(model_path))
+			predictor = entrenar_modelo_ticker(df_fit, ticker, time_limit=900, modelo_path=str(model_path))
 			
 			# Evaluar
 			metricas = evaluar_ticker(df_test["target_ret_log_t5"], predictor, df_test)

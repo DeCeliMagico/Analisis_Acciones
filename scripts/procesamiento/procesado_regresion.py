@@ -44,10 +44,11 @@ COLS_TRAIN = [
 	"volatility_5d",
 	"volatility_20d",
 	"rsi",
-	"macd",
-	"volume",
+	"macd_norm",
+	"volume_rel",
 	"obv_ratio",
 	"target_ret_log_t5",
+	# mes_sin/cos y dow_sin/cos NO están aquí (nunca son NaN, no hace falta dropna).
 	# SPY, VIX y sector NO están aquí: AutoGluon maneja NaN en features.
 	# Incluirlos forzaría dropna y recortaría el histórico de tickers con
 	# datos anteriores al lanzamiento de XLC (junio 2018).
@@ -168,6 +169,15 @@ def crear_features_regresion(df: pd.DataFrame) -> pd.DataFrame:
 
 	df["vol_ma_20"] = gb_volume.transform(lambda s: s.rolling(20).mean())
 
+	# --- Features estacionarias (comparables a lo largo del tiempo) ---
+	# volume_rel: volumen de hoy relativo a su media 20d. El volumen crudo (cientos
+	# de millones) no es comparable entre 2019 y 2025; el ratio sí lo es.
+	df["volume_rel"] = df["volume"] / df["vol_ma_20"]
+
+	# macd_norm: MACD en dólares absolutos cambia de escala si el precio pasa de
+	# $10 a $500. Normalizado por close_prev queda estacionario.
+	df["macd_norm"] = df["macd"] / df["close_prev"]
+
 	# Momentum de largo plazo — consistente con ret_1d y ret_3d (usa close de hoy)
 	df["ret_10d"] = (df["close"] / gb_close.shift(10)) - 1
 	df["ret_20d"] = (df["close"] / gb_close.shift(20)) - 1
@@ -250,6 +260,20 @@ def crear_features_regresion(df: pd.DataFrame) -> pd.DataFrame:
 	# Eliminar columna auxiliar usada solo para el join
 	df = df.drop(columns=["fecha"])
 
+	# --- Estacionalidad cíclica ---
+	# El mes y el día de semana SE REPITEN cada año, así que generalizan al futuro
+	# (capturan patrones tipo "rally de fin de año", efecto lunes, etc.).
+	# Se codifican con seno/coseno para que diciembre (12) y enero (1) queden cerca.
+	# NO usamos el año ni el timestamp crudo: son monótonos y en test caen fuera
+	# del rango de train, donde los árboles no pueden extrapolar.
+	_ts = pd.to_datetime(df["ts_event_utc"])
+	_mes = _ts.dt.month
+	_dow = _ts.dt.dayofweek
+	df["mes_sin"] = np.sin(2 * np.pi * _mes / 12)
+	df["mes_cos"] = np.cos(2 * np.pi * _mes / 12)
+	df["dow_sin"] = np.sin(2 * np.pi * _dow / 5)
+	df["dow_cos"] = np.cos(2 * np.pi * _dow / 5)
+
 	# Target de regresion: retorno logaritmico a 5 dias
 	next_close = df.groupby("symbol")["close"].shift(-5)
 	df["target_ret_log_t5"] = np.log(next_close / df["close"])
@@ -275,8 +299,11 @@ def preparar_para_entrenamiento(df: pd.DataFrame) -> pd.DataFrame:
 	"""
 	
 	cols_permitidas = [
+		# --- Metadatos (NO son features; se usan para split, selección y backtest) ---
 		"symbol",
 		"ts_event_utc",
+		"volume",  # se conserva para seleccionar top tickers por volumen
+		# --- Features del modelo ---
 		"ret_1d",
 		"ret_3d",
 		"ret_10d",
@@ -290,9 +317,8 @@ def preparar_para_entrenamiento(df: pd.DataFrame) -> pd.DataFrame:
 		"volatility_5d",
 		"volatility_20d",
 		"rsi",
-		"macd",
-		"volume",
-		"vol_ma_20",
+		"macd_norm",
+		"volume_rel",
 		"obv_ratio",
 		"spy_ret_1d",
 		"spy_ret_5d",
@@ -302,6 +328,10 @@ def preparar_para_entrenamiento(df: pd.DataFrame) -> pd.DataFrame:
 		"vix_level",
 		"vix_change_1d",
 		"vix_change_5d",
+		"mes_sin",
+		"mes_cos",
+		"dow_sin",
+		"dow_cos",
 		"target_ret_log_t5",
 	]
 	
@@ -317,7 +347,7 @@ def guardar_silver(df: pd.DataFrame) -> None:
 	"""Guarda dataset procesado para regresion."""
 
 	project_root = Path(__file__).resolve().parents[2]
-	silver_dir = project_root / "data" / "silver"
+	silver_dir = project_root / "data" / "silver" / "regresion"
 	silver_dir.mkdir(parents=True, exist_ok=True)
 
 	fecha_ejecucion = datetime.now().strftime("%d-%m-%y_%H%M%S")

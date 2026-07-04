@@ -18,7 +18,7 @@ plt.rcParams['figure.figsize'] = (14, 10)
 
 # Tickers a analizar - se detectan automáticamente de los modelos disponibles
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-MODELOS_DIR = PROJECT_ROOT / "modelos"
+MODELOS_DIR = PROJECT_ROOT / "modelos" / "regresion"
 
 
 def detectar_tickers_disponibles() -> list:

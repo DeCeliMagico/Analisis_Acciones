@@ -118,3 +118,65 @@ TOTAL       2165              181.22%                       $    28,122
 - Long_only portfolio: $23,803 (sin baseline anterior para comparar)
 - Conclusión: señal insuficiente, los técnicos clásicos ya están arbitrados
 - Siguiente paso: Grupo 2 (SPY + VIX como contexto de mercado)
+
+---
+---
+
+# Estado actual — tras Grupo 2 (SPY + VIX) — métricas del JSON
+**Fecha:** 03-07-2026  
+**Features:** Grupo 0 + Grupo 1 + Grupo 2 (spy_ret_1d, spy_ret_5d, spy_ret_20d, vix_level, vix_change_1d, vix_change_5d, ret_rel_spy_1d, ret_rel_spy_5d)  
+**Total features:** ~27 (con las temporales de AutoGluon)
+
+## Métricas out-of-sample (JSON: metricas_regresion_por_ticker_03-07-26_175735.json)
+
+| Ticker | Acc. Dirección | Correlación | R²       | Rel.RMSE |
+|--------|---------------|-------------|----------|----------|
+| KLAC   | 57.66%        | 0.0724      | -0.0188  | 1.0094   |
+| CSCO   | 57.78%        | -0.0303     | -0.0354  | 1.0175   |
+| NVDA   | 57.41%        | -0.0245     | -0.0198  | 1.0098   |
+| GOOG   | 57.11%        | 0.0289      | -0.0304  | 1.0151   |
+| MSFT   | 55.96%        | 0.0859      | -0.0515  | 1.0254   |
+| BAC    | 54.94%        | 0.0467      | +0.0012  | 0.9994   |
+| NFLX   | 52.29%        | 0.1075      | +0.0029  | 0.9985   |
+| ORCL   | 52.02%        | 0.0218      | -0.0026  | 1.0013   |
+| F      | 51.16%        | 0.1006      | +0.0099  | 0.9950   |
+| TSLA   | 48.59%        | 0.1647      | +0.0209  | 0.9895   |
+
+## Conclusión estado actual
+- R² negativo en 7 de 10 tickers → la regresión no captura magnitud
+- Mejor señal direccional: KLAC, CSCO, NVDA, GOOG (>57%)
+- Peor señal: TSLA (48.6%, peor que azar), F (51.2%)
+- SPY/VIX mejoran correlación en algunos tickers pero no el R²
+- **Conclusión**: cambiar de regresión a clasificación binaria (paso B)
+
+---
+
+# Próximos pasos implementados (04-07-2026)
+
+## Paso C — Umbral de confianza (regresión)
+- `backtest_periodos.py` ya acepta `--umbral 0.005` etc.
+- Ejemplo: `python backtest_periodos.py --modo long_only --umbral 0.005`
+
+## Paso B — Clasificación binaria 5d (nuevo pipeline)
+Scripts creados:
+1. `scripts/procesamiento/procesado_clasificacion_5d.py` — genera Silver con target_updown_t5
+2. `scripts/entrenamiento/autogluon_clasificacion_por_ticker.py` — entrena por ticker (ROC-AUC)
+3. `scripts/analisis/backtest_clasificacion.py` — backtest con predict_proba + umbral
+
+### Pipeline completo para ejecutar:
+```
+# 1. Generar datos Silver de clasificación (ya los tienes de regresión, re-usa)
+python scripts/procesamiento/procesado_clasificacion_5d.py
+
+# 2. Entrenar modelos de clasificación por ticker (~20 min)
+python scripts/entrenamiento/autogluon_clasificacion_por_ticker.py
+
+# 3. Backtest sin filtro (baseline clasificación)
+python scripts/analisis/backtest_clasificacion.py --modo long_only
+
+# 4. Backtest con umbral (paso C sobre clasificación)
+python scripts/analisis/backtest_clasificacion.py --modo long_only --umbral 0.55
+
+# 5. Solo tickers con mejor señal (paso A)
+python scripts/analisis/backtest_clasificacion.py --modo long_only --umbral 0.55 --tickers NVDA,CSCO,GOOG,KLAC,MSFT
+```
