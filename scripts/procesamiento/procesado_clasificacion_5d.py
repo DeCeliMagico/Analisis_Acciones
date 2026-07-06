@@ -1,9 +1,10 @@
 """Procesado para clasificacion binaria (horizonte 5 dias).
 
-Objetivo: crear dataset Silver para predecir si el precio SUBE o BAJA
-en los próximos 5 días de mercado (igual que la regresión, pero binario).
+Objetivo: predecir si el precio sube MÁS DE UN UMBRAL MÍNIMO en 5 días.
+Solo se considera señal de compra cuando el movimiento esperado justifica
+la comisión y el riesgo — no cualquier subida de 0.01%.
 
-Target: target_updown_t5 = 1 si ret_log_5d > 0, else 0.
+Target: target_updown_t5 = 1 si ret_log_5d > UMBRAL_RETORNO_MIN, else 0.
 
 Features: idénticos a procesado_regresion.py (Grupo 0 + Grupo 1 + Grupo 2).
 - Grupo 0: ret_1d, ret_3d, gap_prop, range_norm, price_vs_ma20, bb_position,
@@ -19,6 +20,13 @@ import numpy as np
 import pandas as pd
 from lectura_parquets import cargar_bronze
 
+
+# Retorno mínimo en 5 días para considerar la operación como "señal de compra".
+# log(1.01) ≈ 0.00995 → equivale a una subida del 1% en 5 días de mercado.
+# Al 2% había demasiado pocas operaciones (23 trades en TSLA en 2 años → sin
+# base estadística fiable). Al 1% la distribución pasa de 70/30 a ~55/45,
+# lo que da más volumen de trades sin perder el filtro de ruido.
+UMBRAL_RETORNO_MIN = np.log(1.01)  # ~1%
 
 COLS_REQUERIDAS = {
 	"symbol",
@@ -191,7 +199,7 @@ def crear_features_clasificacion_5d(df: pd.DataFrame) -> pd.DataFrame:
 	# Target binario: 1 si el precio sube en 5 días, 0 si baja o igual
 	next_close = df.groupby("symbol")["close"].shift(-5)
 	ret_log_5d = np.log(next_close / df["close"])
-	df["target_updown_t5"] = (ret_log_5d > 0).astype("Int64")
+	df["target_updown_t5"] = (ret_log_5d > UMBRAL_RETORNO_MIN).astype("Int64")
 
 	df = df.replace([np.inf, -np.inf], np.nan)
 

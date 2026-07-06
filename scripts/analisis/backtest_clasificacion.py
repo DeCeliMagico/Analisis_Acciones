@@ -209,10 +209,20 @@ def simular_ticker(
 		i = j + 1
 
 	n_trades = len(trades)
+	rets = [t.retorno_pct for t in trades]
+	wins_rets = [r for r in rets if r > 0]
+	loss_rets = [r for r in rets if r <= 0]
+	avg_win = float(np.mean(wins_rets)) * 100 if wins_rets else 0.0
+	avg_loss = float(np.mean(loss_rets)) * 100 if loss_rets else 0.0
+	ev = (wins / n_trades * avg_win + (1 - wins / n_trades) * avg_loss) if n_trades else 0.0
+
 	resumen = {
 		"num_trades": n_trades,
 		"trades_saltados_umbral": trades_saltados,
 		"win_rate": wins / n_trades if n_trades else 0.0,
+		"avg_win_pct": avg_win,
+		"avg_loss_pct": avg_loss,
+		"expected_value_pct": ev,
 		"capital_inicial": capital_inicial,
 		"capital_final": capital,
 		"retorno_total_pct": (capital / capital_inicial - 1) * 100,
@@ -330,22 +340,28 @@ def imprimir_resumen(resultados: dict) -> None:
 	print()
 
 	print(
-		f"{'Ticker':<8} {'Trades':>7} {'Saltados':>9} {'Win%':>7} "
+		f"{'Ticker':<8} {'Trades':>7} {'Win%':>7} "
+		f"{'Avg+Win':>9} {'Avg-Loss':>10} {'EV/trade':>10} "
 		f"{'Ret.Modelo':>12} {'Ret.B&H':>12} {'MaxDD':>8} {'Capital':>12}"
 	)
-	print("-" * 100)
+	print("-" * 110)
 	for ticker, m in resultados["tickers"].items():
 		print(
-			f"{ticker:<8} {m['num_trades']:>7} {m['trades_saltados_umbral']:>9} "
-			f"{m['win_rate']:>6.1%} {m['retorno_total_pct']:>11.2f}% "
+			f"{ticker:<8} {m['num_trades']:>7} "
+			f"{m['win_rate']:>6.1%} "
+			f"{m.get('avg_win_pct', 0):>+8.2f}% "
+			f"{m.get('avg_loss_pct', 0):>+9.2f}% "
+			f"{m.get('expected_value_pct', 0):>+9.2f}% "
+			f"{m['retorno_total_pct']:>11.2f}% "
 			f"{m['buy_hold_retorno_pct']:>11.2f}% {m['max_drawdown_pct']:>7.1f}% "
 			f"${m['capital_final']:>10,.0f}"
 		)
 
 	p = resultados["portfolio"]
-	print("-" * 100)
+	print("-" * 110)
 	print(
-		f"{'TOTAL':<8} {p['num_trades_total']:>7} {'':>9} {'':>7} "
+		f"{'TOTAL':<8} {p['num_trades_total']:>7} {'':>7} "
+		f"{'':>9} {'':>10} {'':>10} "
 		f"{p['retorno_total_pct']:>11.2f}% {'':>12} {'':>8} "
 		f"${p['capital_final_total']:>10,.0f}"
 	)

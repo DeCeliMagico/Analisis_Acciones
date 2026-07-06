@@ -151,6 +151,64 @@ TOTAL       2165              181.22%                       $    28,122
 
 ---
 
+# Clasificación — Run 1 (06-07-2026, 180s medium_quality, 25 tickers)
+
+## Métricas individuales por ticker (backtest_clasificacion.py --modo long_only)
+
+| Ticker | Trades | Win%  | Avg+Win | Avg-Loss | EV/trade | Ret.Modelo | Capital |
+|--------|--------|-------|---------|----------|----------|------------|---------|
+| MU     | 107    | 61.7% | +4.77%  | -3.60%   | **+1.56%** | +344.74% | $1,779 |
+| AMD    | 120    | 53.3% | +6.99%  | -5.08%   | **+1.36%** | +259.60% | $1,438 |
+| FCX    | 59     | 54.2% | +7.17%  | -5.91%   | **+1.18%** | +66.42%  | $666  |
+| KLAC   | 184    | 56.0% | +5.20%  | -4.20%   | **+1.06%** | +383.53% | $1,934 |
+| AMAT   | 136    | 61.8% | +4.80%  | -5.43%   | **+0.89%** | +146.37% | $985  |
+| NVDA   | 127    | 55.1% | +5.43%  | -5.03%   | **+0.74%** | +90.51%  | $762  |
+| CSCO   | 113    | 59.3% | +2.85%  | -2.55%   | **+0.65%** | +91.51%  | $766  |
+| BAC    | 80     | 53.8% | +4.67%  | -3.99%   | **+0.66%** | +47.24%  | $589  |
+| LRCX   | 32     | 59.4% | +5.38%  | -6.35%   | **+0.62%** | +13.06%  | $452  |
+| JPM    | 56     | 55.4% | +4.33%  | -4.43%   | +0.42%   | +15.40%  | $462  |
+| KO     | 119    | 54.6% | +2.39%  | -1.98%   | +0.40%   | +51.71%  | $607  |
+| ORLY   | 107    | 55.1% | +2.87%  | -2.72%   | +0.36%   | +37.38%  | $550  |
+| WMT    | 103    | 50.5% | +2.86%  | -2.16%   | +0.37%   | +37.27%  | $549  |
+| XOM    | 177    | 54.2% | +3.13%  | -3.11%   | +0.28%   | +39.11%  | $556  |
+| CMCSA  | 5      | 60.0% | +2.27%  | -2.02%   | +0.55%   | +2.61%   | $410  |
+| MSFT   | 69     | 44.9% | +3.58%  | -3.04%   | -0.07%   | -9.84%   | $361  |
+| SBUX   | 121    | 47.1% | +3.27%  | -3.13%   | -0.11%   | -22.35%  | $311  |
+| WFC    | 88     | 45.5% | +4.41%  | -4.12%   | -0.24%   | -29.48%  | $282  |
+| GILD   | 32     | 46.9% | +2.01%  | -2.25%   | -0.25%   | -8.76%   | $365  |
+| T      | 103    | 45.6% | +2.47%  | -2.89%   | -0.44%   | -40.93%  | $236  |
+| NKE    | 150    | 50.0% | +3.38%  | -4.18%   | -0.40%   | -54.76%  | $181  |
+| F      | 50     | 36.0% | +5.59%  | -4.71%   | -1.00%   | -46.20%  | $215  |
+| ORCL   | 43     | 39.5% | +2.96%  | -4.36%   | -1.46%   | -49.47%  | $202  |
+
+## Portfolio top-3 (solo 9 tickers con EV > 0.6%)
+
+**Script:** `backtest_portfolio_topn.py --top 3 --umbral 0.52 --tickers MU,AMD,FCX,KLAC,AMAT,NVDA,CSCO,BAC,LRCX`
+
+| Métrica | Valor |
+|---------|-------|
+| Capital final | **$55,490** |
+| Retorno total | **+454.90%** |
+| Win rate períodos | 58.3% (98/168) |
+| Avg win período | +5.15% |
+| Avg loss período | -4.27% |
+| EV/período | +1.23% |
+| Max Drawdown | 41.7% |
+
+## Conclusión Run 1
+- 9 tickers con EV/trade positivo claro (>0.6%): MU, AMD, FCX, KLAC, AMAT, NVDA, CSCO, BAC, LRCX
+- Estrategia portfolio top-3 funciona bien con esos 9: **$55,490 (+454.90%)**
+- Win rate períodos 58.3%, EV/período +1.23%, MaxDD 41.7%
+
+## Run 2 — fallido (06-07-2026, 480s + medium_quality, sin tuning_data)
+Intento de mejorar con más tiempo de entrenamiento. Resultado: AUC empeoró en la mayoría de tickers.
+- **Causa:** `medium_quality` usa k-fold aleatorio que introduce leakage temporal en datos de bolsa.
+- **Conclusión:** la combinación `tuning_data` + sin preset es la correcta para datos temporales.
+  El `tuning_data` actúa como holdout temporal y evita que AutoGluon use datos futuros para validar.
+- **Revertido** al setup Run 1.
+
+---
+
 # Próximos pasos implementados (04-07-2026)
 
 ## Paso C — Umbral de confianza (regresión)
@@ -180,3 +238,7 @@ python scripts/analisis/backtest_clasificacion.py --modo long_only --umbral 0.55
 # 5. Solo tickers con mejor señal (paso A)
 python scripts/analisis/backtest_clasificacion.py --modo long_only --umbral 0.55 --tickers NVDA,CSCO,GOOG,KLAC,MSFT
 ```
+
+## mejor resultado hasta ahora en backtest:
+
+python scripts/analisis/backtest_portfolio_topn.py --top 3 --umbral 0.52 --tickers MU,AMD,FCX,KLAC,AMAT,NVDA,CSCO,BAC,LRCX

@@ -25,6 +25,20 @@ from sklearn.metrics import (
 import json
 from datetime import datetime
 
+LABEL = "target_updown_t5"
+
+# Features explícitas: excluye ts_event_utc (leakage de fecha) y symbol (constante por ticker)
+# Idéntico al conjunto de regresión — Grupo 0 + Grupo 1 + Grupo 2
+FEATURES = [
+	"ret_1d", "ret_3d", "ret_10d", "ret_20d", "ret_60d",
+	"gap_prop", "range_norm", "price_vs_ma20", "bb_position", "dist_52w_high",
+	"volatility_5d", "volatility_20d",
+	"rsi", "macd", "volume", "obv_ratio",
+	"spy_ret_1d", "spy_ret_5d", "spy_ret_20d",
+	"ret_rel_spy_1d", "ret_rel_spy_5d",
+	"vix_level", "vix_change_1d", "vix_change_5d",
+]
+
 
 def cargar_silver() -> pd.DataFrame:
 	"""Carga el parquet de clasificación 5d más reciente."""
@@ -41,11 +55,16 @@ def cargar_silver() -> pd.DataFrame:
 
 def seleccionar_top_tickers(
 	df: pd.DataFrame,
-	n: int = 10,
+	n: int = 25,
+	min_filas: int = 6_000,
 	excluir: list | None = None,
 	solo: list | None = None,
 ) -> list:
-	"""Selecciona tickers. Si `solo` se especifica, usa exactamente esa lista."""
+	"""Selecciona tickers por volumen, filtrando los que tienen pocos datos históricos.
+
+	min_filas: tickers con menos filas se descartan — modelos con poco histórico
+	generalizan peor y el set de test queda demasiado corto.
+	"""
 	if solo:
 		tickers_disponibles = df["symbol"].unique().tolist()
 		return [t for t in solo if t in tickers_disponibles]
@@ -53,12 +72,17 @@ def seleccionar_top_tickers(
 	if excluir is None:
 		excluir = []
 
-	vol_promedio = df.groupby("symbol")["volume"].mean().sort_values(ascending=False)
-	top = [t for t in vol_promedio.index if t not in excluir][:n]
+	conteo = df.groupby("symbol").size()
+	tickers_suficientes = conteo[conteo >= min_filas].index.tolist()
 
-	print(f"Top {n} tickers por volumen promedio:")
+	vol_promedio = df.groupby("symbol")["volume"].mean().sort_values(ascending=False)
+	top = [t for t in vol_promedio.index if t in tickers_suficientes and t not in excluir][:n]
+
+	descartados = conteo[conteo < min_filas].shape[0]
+	print(f"Tickers descartados por pocos datos (<{min_filas} filas): {descartados}")
+	print(f"Top {len(top)} tickers seleccionados (volumen + datos suficientes):")
 	for ticker in top:
-		print(f"  {ticker}: {vol_promedio[ticker]:,.0f}")
+		print(f"  {ticker}: vol={vol_promedio[ticker]:,.0f} | filas={conteo[ticker]:,}")
 
 	return top
 
@@ -80,11 +104,35 @@ def hacer_split_temporal_ticker(
 	)
 
 
+def preparar_split(df: pd.DataFrame) -> pd.DataFrame:
+	"""Selecciona solo features + target, sin ts_event_utc ni symbol."""
+	df = df.sort_values("ts_event_utc").reset_index(drop=True)
+	return df[FEATURES + [LABEL]].copy()
+
+
+def añadir_pesos_clase(df: pd.DataFrame) -> pd.DataFrame:
+	"""Añade columna sample_weight con pesos inversamente proporcionales a la frecuencia.
+
+	Con target desbalanceado (70% clase 0, 30% clase 1), el modelo tiende a predecir
+	siempre clase 0 (nunca sube >2%). Los pesos inversos hacen que equivocarse en
+	clase 1 cueste 2.3x más — forzando al modelo a aprender a detectar subidas grandes.
+	Los pesos se calculan por ticker (no globalmente) para respetar sus distribuciones.
+	"""
+	df = df.copy()
+	counts = df["target_updown_t5"].value_counts()
+	n_total = len(df)
+	n_clases = len(counts)
+	# Peso = n_total / (n_clases * count_clase) — fórmula estándar sklearn
+	peso_por_clase = {cls: n_total / (n_clases * cnt) for cls, cnt in counts.items()}
+	df["sample_weight"] = df["target_updown_t5"].map(peso_por_clase)
+	return df
+
+
 def entrenar_modelo_ticker(
 	df_train: pd.DataFrame,
 	df_valid: pd.DataFrame,
 	ticker: str,
-	time_limit: int = 120,
+	time_limit: int = 180,
 	modelo_path: str | None = None,
 ) -> TabularPredictor:
 	"""Entrena AutoGluon clasificación binaria para un ticker."""
@@ -92,6 +140,7 @@ def entrenar_modelo_ticker(
 		label="target_updown_t5",
 		problem_type="binary",
 		eval_metric="roc_auc",
+		sample_weight="sample_weight",  # pesos de clase inversos
 		verbosity=0,
 		path=modelo_path,
 	)
@@ -161,7 +210,8 @@ def main() -> None:
 	print("\n[2/3] Seleccionando tickers...")
 	top_tickers = seleccionar_top_tickers(
 		df,
-		n=10,
+		n=25,
+		min_filas=6_000,
 		excluir=["AMZN", "GOOGL", "AAPL", "INTC", "META", "QCOM"],
 	)
 
@@ -186,13 +236,22 @@ def main() -> None:
 		df_train, df_valid, df_test = hacer_split_temporal_ticker(df_ticker)
 		print(f"  Train: {len(df_train)} | Valid: {len(df_valid)} | Test: {len(df_test)}")
 
+		# Seleccionar solo features + target (sin ts_event_utc ni symbol)
+		df_train_f = preparar_split(df_train)
+		df_valid_f = preparar_split(df_valid)
+		df_test_f = preparar_split(df_test)
+
+		# Pesos inversamente proporcionales a la frecuencia de cada clase
+		df_train_w = añadir_pesos_clase(df_train_f)
+		df_valid_w = añadir_pesos_clase(df_valid_f)
+
 		try:
 			model_path = modelos_dir / f"Clf_AI_Ticker_{ticker}_{fecha_ejecucion}"
 			predictor = entrenar_modelo_ticker(
-				df_train, df_valid, ticker, time_limit=120, modelo_path=str(model_path)
+				df_train_w, df_valid_w, ticker, time_limit=180, modelo_path=str(model_path)
 			)
 
-			metricas = evaluar_ticker(df_test["target_updown_t5"], predictor, df_test)
+			metricas = evaluar_ticker(df_test_f[LABEL], predictor, df_test_f)
 			print(
 				f"  Acc: {metricas['accuracy']:.2%} | AUC: {metricas['roc_auc']:.4f} | "
 				f"Alta conf(55%): {metricas['pct_alta_confianza_55']:.1%}"

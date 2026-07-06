@@ -55,17 +55,9 @@ FEATURES = [
 
 
 def preparar_split_para_fit(df_split: pd.DataFrame) -> pd.DataFrame:
-	"""Selecciona features + target y añade sample_weight por recencia.
-
-	El peso crece linealmente de 0.5 (fila más antigua) a 1.0 (más reciente),
-	para que el modelo priorice el régimen de mercado actual sin ignorar el
-	histórico. Respeta el orden temporal del split.
-	"""
+	"""Selecciona features + target para entrenar."""
 	df_split = df_split.sort_values("ts_event_utc").reset_index(drop=True)
-	out = df_split[FEATURES + [LABEL]].copy()
-	n = len(out)
-	out["sample_weight"] = np.linspace(0.5, 1.0, n) if n > 1 else 1.0
-	return out
+	return df_split[FEATURES + [LABEL]].copy()
 
 
 # Cargar datos Silver de regresion
@@ -152,37 +144,38 @@ def hacer_split_temporal_ticker(df_ticker: pd.DataFrame, train_pct: float = 0.7,
 
 
 # Entrenar AutoGluon para un ticker
-def entrenar_modelo_ticker(df_fit: pd.DataFrame, ticker: str, time_limit: int = 500, modelo_path: str = None) -> TabularPredictor:
-	"""Entrena AutoGluon (best_quality) para un ticker específico.
+def entrenar_modelo_ticker(
+	df_train: pd.DataFrame,
+	df_valid: pd.DataFrame,
+	ticker: str,
+	time_limit: int = 180,
+	preset: str = "medium_quality",
+	modelo_path: str = None,
+) -> TabularPredictor:
+	"""Entrena AutoGluon para un ticker específico.
 
 	Parametros:
-		df_fit: 85% temporal (train+valid) con features + target + sample_weight
-		ticker: nombre del ticker (para nombrar el modelo)
-		time_limit: segundos máximo de entrenamiento
+		df_train: datos de entrenamiento (features + target, ya preparados)
+		df_valid: holdout temporal de validación (freno de overfitting)
+		ticker: nombre del ticker
+		time_limit: segundos de entrenamiento
+		preset: "medium_quality" (dev, 180s) o "best_quality" (prod, 900s)
 		modelo_path: ruta donde guardar el modelo
-
-	Retorna:
-		predictor entrenado
 	"""
-	
 	predictor = TabularPredictor(
 	    label=LABEL,
 	    problem_type="regression",
 		eval_metric="rmse",
-		sample_weight="sample_weight",  # columna de pesos por recencia
 		verbosity=0,
 		path=modelo_path
 	)
 
 	predictor.fit(
-	    train_data=df_fit,
+	    train_data=df_train,
+		tuning_data=df_valid,   # holdout temporal: guía la validación sin leakage
 	    time_limit=time_limit,
-		# best_quality: bagging + stacking + redes neuronales (máxima precisión).
-		# No se pasa tuning_data: AutoGluon hace su CV interna sobre el 85%.
-		# El 15% de test queda intacto para el backtest (juez out-of-sample real);
-		# la mezcla temporal del k-fold interno no afecta a ese bloque futuro.
-		presets="best_quality",
-		excluded_model_types=["RF","XT"],  # ahorro de RAM
+		presets=preset,
+		excluded_model_types=["RF","XT"],
 		num_gpus=0
     )
 
@@ -241,7 +234,6 @@ def evaluar_ticker(y_true, predictor, df_test: pd.DataFrame) -> dict:
 # MAIN
 def main() -> None:
 	"""Entrena modelos por ticker."""
-	
 	print("=" * 70)
 	print("ENTRENAMIENTO DE REGRESION POR TICKER (TOP 10 POR VOLUMEN)")
 	print("=" * 70)
@@ -275,17 +267,22 @@ def main() -> None:
 		df_ticker = df[df["symbol"] == ticker].copy()
 		print(f"  Filas: {len(df_ticker)}")
 		
-		# Split temporal: 85% (train+valid) para entrenar, 15% final para test/backtest
+		# Split temporal: train 70% / valid 15% / test 15%
 		df_train, df_valid, df_test = hacer_split_temporal_ticker(df_ticker)
-		print(f"  Train+Valid: {len(df_train) + len(df_valid)} | Test: {len(df_test)}")
+		print(f"  Train: {len(df_train)} | Valid: {len(df_valid)} | Test: {len(df_test)}")
 
-		# Combinar 85%, seleccionar features y añadir sample_weight por recencia
-		df_fit = preparar_split_para_fit(pd.concat([df_train, df_valid]))
+		# Seleccionar features
+		df_train_fit = preparar_split_para_fit(df_train)
+		df_valid_fit = preparar_split_para_fit(df_valid)
 
 		# Entrenar
 		try:
 			model_path = modelos_dir / f"Market_AI_Ticker_{ticker}_{fecha_ejecucion}"
-			predictor = entrenar_modelo_ticker(df_fit, ticker, time_limit=900, modelo_path=str(model_path))
+			predictor = entrenar_modelo_ticker(
+				df_train_fit, df_valid_fit, ticker,
+				time_limit=180, preset="medium_quality",
+				modelo_path=str(model_path),
+			)
 			
 			# Evaluar
 			metricas = evaluar_ticker(df_test["target_ret_log_t5"], predictor, df_test)
