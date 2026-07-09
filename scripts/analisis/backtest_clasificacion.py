@@ -30,19 +30,19 @@ MODELOS_DIR = PROJECT_ROOT / "modelos" / "clasificacion"
 SILVER_DIR = PROJECT_ROOT / "data" / "silver" / "clasificacion"
 EVAL_DIR = PROJECT_ROOT / "evaluaciones"
 
-HORIZON_DAYS = 5
-TRAIN_PCT = 0.7
-VALID_PCT = 0.15
+HORIZON_DAYS = 5  # días de mercado que dura cada operación
+TRAIN_PCT = 0.7   # 70% de los datos de cada ticker van a entrenamiento
+VALID_PCT = 0.15  # 15% a validación; el 15% final es el test (out-of-sample)
 
 
 @dataclass
 class BacktestConfig:
 	capital_inicial: float = 10_000.0
-	comision_pct: float = 0.001
-	modo: str = "long_only"
-	tickers: list[str] | None = None
-	umbral_largo: float = 0.5    # P(sube) > umbral_largo → long
-	umbral_corto: float = 0.5    # P(sube) < umbral_corto → short (1 - umbral_largo)
+	comision_pct: float = 0.001        # 0.1% por operación, se cobra al entrar y al salir (×2)
+	modo: str = "long_only"            # "long_only" solo compra; "long_short" también vende en corto
+	tickers: list[str] | None = None   # None = usar todos los modelos disponibles
+	umbral_largo: float = 0.5          # solo se compra si P(sube) > este valor
+	umbral_corto: float = 0.5          # solo se vende en corto si P(sube) < este valor
 	fecha_inicio_test: str | None = None
 	fecha_fin_test: str | None = None
 
@@ -52,8 +52,8 @@ class TradeResult:
 	ticker: str
 	fecha_entrada: str
 	fecha_salida: str
-	direccion: str
-	prob_up: float
+	direccion: str    # "long" o "short"
+	prob_up: float    # P(sube) que tenía el modelo en la fecha de entrada
 	retorno_log: float
 	retorno_pct: float
 	pnl: float
@@ -67,10 +67,13 @@ def cargar_silver() -> pd.DataFrame:
 			f"No hay Silver de clasificacion_5d en {SILVER_DIR}\n"
 			"Ejecuta: python scripts/procesamiento/procesado_clasificacion_5d.py"
 		)
+	# Carga el archivo más reciente (sorted ordena por nombre, que incluye timestamp)
 	return pd.read_parquet(sorted(archivos)[-1])
 
 
 def detectar_tickers_modelos() -> list[str]:
+	# Lee las carpetas de modelos y extrae el nombre del ticker del nombre de carpeta
+	# Formato esperado: Clf_AI_Ticker_NVDA_2026-07-06_...
 	tickers = set()
 	for d in MODELOS_DIR.glob("Clf_AI_Ticker_*"):
 		parts = d.name.split("_")
@@ -80,6 +83,7 @@ def detectar_tickers_modelos() -> list[str]:
 
 
 def cargar_modelo(ticker: str) -> TabularPredictor:
+	# Si hay varios modelos para el mismo ticker (reentrenamientos), coge el último
 	dirs = sorted(MODELOS_DIR.glob(f"Clf_AI_Ticker_{ticker}_*"))
 	if not dirs:
 		raise FileNotFoundError(f"No hay modelo de clasificacion para {ticker}")
@@ -87,6 +91,8 @@ def cargar_modelo(ticker: str) -> TabularPredictor:
 
 
 def split_test(df_ticker: pd.DataFrame) -> pd.DataFrame:
+	# Devuelve solo el 15% final del histórico de ese ticker (out-of-sample)
+	# El orden temporal es crítico: no se mezclan datos del futuro con el pasado
 	df_ticker = df_ticker.sort_values("ts_event_utc").reset_index(drop=True)
 	n = len(df_ticker)
 	n_train = int(n * TRAIN_PCT)
@@ -99,6 +105,7 @@ def split_test_subperiodo(
 	fecha_inicio: str | None = None,
 	fecha_fin: str | None = None,
 ) -> pd.DataFrame:
+	# Igual que split_test pero recortando además a un rango de fechas concreto
 	df_test = split_test(df_ticker)
 	if fecha_inicio is None or fecha_fin is None:
 		return df_test
@@ -109,6 +116,8 @@ def split_test_subperiodo(
 
 
 def log_a_pct(ret_log: float) -> float:
+	# Convierte retorno logarítmico a retorno porcentual normal
+	# log→pct: expm1(x) = e^x - 1
 	return float(np.expm1(ret_log))
 
 
@@ -119,26 +128,29 @@ def simular_ticker(
 	config: BacktestConfig,
 	capital_inicial: float,
 ) -> tuple[list[TradeResult], float, dict]:
-	"""Simula operaciones usando probabilidades de clasificación."""
+	"""Simula operaciones usando probabilidades de clasificación.
 
+	Recorre el periodo de test día a día. En cada día consulta P(sube) del modelo.
+	Si supera el umbral, simula que se compra ese día y se vende 5 días después.
+	No se solapan operaciones: tras abrir una posición, el siguiente intento
+	empieza en la fecha de salida + 1 día.
+	"""
 	capital = capital_inicial
 	df = df_test.sort_values("ts_event_utc").reset_index(drop=True)
 
-	# Obtener P(sube) para cada fila
+	# Calcular P(sube) para todas las filas del test de una vez (más eficiente que fila a fila)
+	# predict_proba devuelve probabilidades para cada clase: columna 0 = P(baja), columna 1 = P(sube)
 	proba_df = predictor.predict_proba(df)
 	if hasattr(proba_df, "columns"):
-		proba_up = proba_df[1].values
+		proba_up = proba_df[1].values   # DataFrame de AutoGluon con columnas 0 y 1
 	else:
-		proba_up = proba_df[:, 1]
+		proba_up = proba_df[:, 1]       # array numpy
 
 	fechas = pd.to_datetime(df["ts_event_utc"]).values
-	targets = df["target_updown_t5"].values  # 1=sube, 0=baja
+	targets = df["target_updown_t5"].values  # 1=sube, 0=baja — solo para referencia, no se usa aquí
 
-	# Necesitamos el retorno real para calcular P&L: lo derivamos del target_updown_t5
-	# y de ret_1d acumulado. Pero el Silver de clasificación no guarda ret_log_5d.
-	# Aproximación: usamos el signo del target + volatilidad como retorno base.
-	# Mejor: calcular desde ret_1d los 5 días siguientes cuando estén disponibles.
-	# Usamos los campos disponibles: target_updown_t5 y ret_1d rolling
+	# ret_1d es el retorno diario de cada fila; lo usamos para calcular el retorno acumulado real
+	# de los 5 días siguientes a la entrada (el retorno "verdadero" de la operación)
 	ret_1d_vals = df["ret_1d"].values if "ret_1d" in df.columns else np.zeros(len(df))
 
 	trades: list[TradeResult] = []
@@ -151,14 +163,15 @@ def simular_ticker(
 	while i < len(df):
 		prob = float(proba_up[i])
 
-		# Filtro de confianza
+		# Decidir si operar este día y en qué dirección según el umbral
 		if config.modo == "long_only":
 			if prob <= config.umbral_largo:
+				# Confianza insuficiente: no se opera este día
 				i += 1
 				trades_saltados += 1
 				continue
 			direccion = "long"
-		else:
+		else:  # long_short
 			if prob > config.umbral_largo:
 				direccion = "long"
 			elif prob < config.umbral_corto:
@@ -168,17 +181,21 @@ def simular_ticker(
 				trades_saltados += 1
 				continue
 
+		# Índice de la fila de salida (5 días de mercado después de la entrada)
 		j = i + HORIZON_DAYS
 		if j >= len(df):
-			break
+			break  # no hay suficientes días restantes para completar la operación
 
-		# Calcular retorno real acumulado de los 5 días siguientes
+		# Retorno real acumulado de los 5 días siguientes a la entrada
+		# Se multiplican los factores diarios: (1+r1)*(1+r2)*...*(1+r5) - 1
 		ret_real_5d = np.prod(1 + ret_1d_vals[i + 1 : j + 1]) - 1
 		ret_log_bruto = np.log(1 + ret_real_5d) if ret_real_5d > -1 else -10.0
 
+		# En short el retorno se invierte: si la acción baja, ganamos
 		if direccion == "short":
 			ret_log_bruto = -ret_log_bruto
 
+		# Descontar comisión de entrada y de salida (2× comision_pct)
 		costo = 2 * config.comision_pct
 		ret_log_neto = ret_log_bruto - costo
 		ret_pct_neto = log_a_pct(ret_log_neto)
@@ -188,6 +205,7 @@ def simular_ticker(
 		if ret_log_neto > 0:
 			wins += 1
 
+		# Actualizar drawdown máximo (caída máxima desde el pico de capital)
 		peak = max(peak, capital)
 		dd = (peak - capital) / peak if peak > 0 else 0.0
 		max_dd = max(max_dd, dd)
@@ -206,6 +224,7 @@ def simular_ticker(
 			)
 		)
 
+		# La siguiente operación empieza justo después de que cierre la actual
 		i = j + 1
 
 	n_trades = len(trades)
@@ -214,6 +233,9 @@ def simular_ticker(
 	loss_rets = [r for r in rets if r <= 0]
 	avg_win = float(np.mean(wins_rets)) * 100 if wins_rets else 0.0
 	avg_loss = float(np.mean(loss_rets)) * 100 if loss_rets else 0.0
+
+	# EV/trade = valor esperado por operación = win_rate × avg_win + (1-win_rate) × avg_loss
+	# Indica si en promedio cada operación gana o pierde dinero
 	ev = (wins / n_trades * avg_win + (1 - wins / n_trades) * avg_loss) if n_trades else 0.0
 
 	resumen = {
@@ -234,6 +256,8 @@ def simular_ticker(
 
 
 def buy_and_hold_benchmark(df_test: pd.DataFrame, capital: float, comision_pct: float) -> dict:
+	"""Calcula cuánto habría ganado simplemente comprando al inicio del test y manteniendo.
+	Sirve como referencia para saber si el modelo bate al mercado o no."""
 	if len(df_test) < 2:
 		return {"retorno_total_pct": 0.0, "capital_final": capital}
 	df = df_test.sort_values("ts_event_utc").reset_index(drop=True)
@@ -268,6 +292,7 @@ def ejecutar_backtest(config: BacktestConfig) -> dict:
 		"portfolio": {},
 	}
 
+	# El capital total se divide a partes iguales entre todos los tickers
 	capital_por_ticker = config.capital_inicial / len(tickers)
 	capital_total = 0.0
 	all_trades: list[TradeResult] = []
@@ -319,7 +344,7 @@ def ejecutar_backtest(config: BacktestConfig) -> dict:
 	return resultados
 
 
-def imprimir_resumen(resultados: dict) -> None:
+def imprimir_resumen(resultados: dict, ev_umbral: float = 0.6) -> None:
 	print("=" * 100)
 	print("BACKTEST CLASIFICACION (periodo TEST, out-of-sample)")
 	print("=" * 100)
@@ -339,6 +364,8 @@ def imprimir_resumen(resultados: dict) -> None:
 		print(f"{ticker:<8} {m['periodo_test_inicio']:<32} {m['periodo_test_fin']:<32} {m['filas_test']:<8}")
 	print()
 
+	# Columnas: EV/trade = valor esperado por operación (positivo = modelo rentable en media)
+	# Ret.B&H = retorno de comprar y mantener en el mismo periodo (referencia)
 	print(
 		f"{'Ticker':<8} {'Trades':>7} {'Win%':>7} "
 		f"{'Avg+Win':>9} {'Avg-Loss':>10} {'EV/trade':>10} "
@@ -365,6 +392,23 @@ def imprimir_resumen(resultados: dict) -> None:
 		f"{p['retorno_total_pct']:>11.2f}% {'':>12} {'':>8} "
 		f"${p['capital_final_total']:>10,.0f}"
 	)
+	print()
+
+	# Tickers con EV/trade por encima del umbral: estos son los que vale la pena pasar
+	# a obtener_predicciones.py para el paper trading
+	tickers_buenos = sorted(
+		t for t, m in resultados["tickers"].items()
+		if m.get("expected_value_pct", 0) >= ev_umbral
+	)
+	print("=" * 100)
+	print(f"  Tickers con EV/trade >= {ev_umbral:.1f}%: {', '.join(tickers_buenos) if tickers_buenos else 'ninguno'}")
+	print()
+	if tickers_buenos:
+		tickers_str = ",".join(tickers_buenos)
+		print("  Comando para obtener predicciones con estos tickers:")
+		print()
+		print(f"  python scripts/analisis/obtener_predicciones.py --tickers {tickers_str}")
+	print("=" * 100)
 	print()
 
 
@@ -396,6 +440,15 @@ def main() -> None:
 	)
 	parser.add_argument("--fecha-inicio", type=str, default=None)
 	parser.add_argument("--fecha-fin", type=str, default=None)
+	parser.add_argument(
+		"--ev-umbral",
+		type=float,
+		default=0.6,
+		help=(
+			"EV/trade mínimo (en %%) para incluir un ticker en el comando de predicciones. "
+			"Default: 0.6"
+		),
+	)
 	args = parser.parse_args()
 
 	tickers = [t.strip() for t in args.tickers.split(",") if t.strip()] or None
@@ -411,7 +464,7 @@ def main() -> None:
 	)
 
 	resultados = ejecutar_backtest(config)
-	imprimir_resumen(resultados)
+	imprimir_resumen(resultados, ev_umbral=args.ev_umbral)
 
 
 if __name__ == "__main__":
